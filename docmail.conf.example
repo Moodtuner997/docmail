@@ -1,0 +1,42 @@
+# ──────────────────────────────────────────────
+# Docmail configuration
+# Copy this file to ~/docmail.conf and fill in your values
+# chmod 600 ~/docmail.conf
+# ──────────────────────────────────────────────
+
+# ── Local paths ──────────────────────────────
+
+# Directory where generated HTML documents are saved locally
+DOCMAIL_OUTPUT_DIR="/path/to/docmail/output"
+
+# Directory containing the DOCMAIL_TOKEN file (bare value, no KEY= prefix)
+DOCMAIL_SECRETS_DIR="/path/to/secrets"
+
+# ── Webhook ──────────────────────────────────
+
+# Your n8n webhook URL (the /docmail endpoint)
+DOCMAIL_WEBHOOK_URL="https://your-n8n-host.example.com/webhook"
+
+# ── n8n server paths ─────────────────────────
+
+# Directory on the n8n server where documents are stored
+# This must match the path used in the n8n workflow Code nodes
+N8N_DOCMAIL_DIR="/home/node/docmail"
+
+# ── SMTP (n8n credentials) ───────────────────
+
+# n8n SMTP credential ID (find in n8n > Settings > Credentials)
+# Used in workflow JSON files — update after importing
+N8N_SMTP_CREDENTIAL_ID="your-smtp-credential-id"
+N8N_SMTP_CREDENTIAL_NAME="SMTP account"
+
+# ── Optional ─────────────────────────────────
+
+# Voice definitions file for personality modes (leave empty to skip)
+DOCMAIL_VOICE_DEFS=""
+
+# Timezone for the morning recap cron (IANA format)
+DOCMAIL_TIMEZONE="Europe/Paris"
+
+# Recap schedule hour (24h format)
+DOCMAIL_RECAP_HOUR="8"

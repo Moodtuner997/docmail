@@ -1,0 +1,22 @@
+# Config with real credentials
+*.conf
+!*.conf.example
+
+# Runtime state
+*.sent
+
+# Logs
+*.log
+
+# Generated documents
+*.html
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Editor
+.vscode/
+*.swp
+*.local.md
+*.local.json

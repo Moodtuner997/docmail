@@ -1,0 +1,133 @@
+{
+  "id": "docmail-receiver",
+  "name": "Docmail Receiver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docmail",
+        "responseMode": "lastNode"
+      },
+      "id": "webhook-docmail",
+      "name": "Webhook Docmail",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "docmail"
+    },
+    {
+      "parameters": {
+        "jsCode": "const token = $env.DOCMAIL_TOKEN;\nconst authHeader = $input.first().json.headers?.authorization || '';\nconst provided = authHeader.replace('Bearer ', '');\n\nif (!token || provided !== token) {\n  throw new Error('Unauthorized: invalid or missing token');\n}\n\nreturn $input.all();"
+      },
+      "id": "code-auth",
+      "name": "Auth Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-instant",
+              "leftValue": "={{ $json.body.mode }}",
+              "rightValue": "instant",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-instant",
+      "name": "Is Instant?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\nconst item = $input.first().json;\n\n// Payload size validation (5MB max)\nconst content = item.body?.content || '';\nif (Buffer.byteLength(content, 'utf8') > 5 * 1024 * 1024) {\n  throw new Error('Payload too large: content exceeds 5MB limit');\n}\n\n// Filename sanitization: strip path components to prevent traversal\nlet filename = item.body?.filename || 'docmail_' + Date.now() + '.html';\nfilename = path.basename(filename);\nif (!filename || filename === '.' || filename === '..' || filename.includes('\\0')) {\n  filename = 'unnamed_' + Date.now() + '.html';\n}\n\n// UPDATE THIS PATH to match your n8n server's docmail directory\nconst destDir = '/home/node/docmail';\nconst filePath = path.join(destDir, filename);\n\n// Final check: resolved path must stay inside destDir\nif (!path.resolve(filePath).startsWith(path.resolve(destDir) + path.sep) && path.resolve(filePath) !== path.resolve(destDir)) {\n  throw new Error('Path traversal rejected');\n}\n\nfs.writeFileSync(filePath, content);\n\nconst subject = item.body?.subject || 'Document';\n\nconst fileBuffer = fs.readFileSync(filePath);\n\nreturn [{\n  json: {\n    status: 'saved',\n    path: filePath,\n    filename,\n    subject\n  },\n  binary: {\n    file: {\n      data: fileBuffer.toString('base64'),\n      mimeType: 'text/html',\n      fileName: filename\n    }\n  }\n}];"
+      },
+      "id": "code-save-instant",
+      "name": "Save Instant File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SMTP_USER }}",
+        "toEmail": "={{ $env.SMTP_USER }}",
+        "subject": "=[Docmail] {{ $json.subject }}",
+        "text": "Document envoye en instantane.\n\nFichier: {{ $json.filename }}",
+        "options": {
+          "attachments": "file"
+        }
+      },
+      "id": "email-instant",
+      "name": "Email Instant",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1160, 200],
+      "credentials": {
+        "smtp": {
+          "id": "YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\n// UPDATE THIS PATH to match your n8n server's docmail directory\nconst dir = '/home/node/docmail';\nconst archiveDir = '/home/node/docmail/archive';\n\nif (!fs.existsSync(archiveDir)) {\n  fs.mkdirSync(archiveDir, { recursive: true });\n}\n\nconst saveData = $('Save Instant File').first().json;\nlet filename = saveData.filename;\nconst subject = saveData.subject;\nif (filename) {\n  // Defense in depth: re-sanitize even though Save Instant File already strips paths\n  filename = path.basename(filename);\n  if (!filename || filename === '.' || filename === '..' || filename.includes('\\0')) {\n    return [{ json: { status: 'instant_sent', subject: subject || 'Document', warning: 'invalid filename, archive skipped' } }];\n  }\n  const src = path.join(dir, filename);\n  const dst = path.join(archiveDir, filename);\n  if (fs.existsSync(src)) {\n    fs.renameSync(src, dst);\n  }\n}\n\nreturn [{ json: { status: 'instant_sent', subject: subject || 'Document' } }];"
+      },
+      "id": "code-archive-instant",
+      "name": "Archive + Respond",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\nconst item = $input.first().json;\n\n// Payload size validation (5MB max)\nconst content = item.body?.content || JSON.stringify(item.body || {});\nif (Buffer.byteLength(content, 'utf8') > 5 * 1024 * 1024) {\n  throw new Error('Payload too large: content exceeds 5MB limit');\n}\n\n// Filename sanitization: strip path components to prevent traversal\nlet filename = item.body?.filename || 'docmail_' + Date.now() + '.html';\nfilename = path.basename(filename);\nif (!filename || filename === '.' || filename === '..' || filename.includes('\\0')) {\n  filename = 'unnamed_' + Date.now() + '.html';\n}\n\n// UPDATE THIS PATH to match your n8n server's docmail directory\nconst destDir = '/home/node/docmail';\nconst filePath = path.join(destDir, filename);\n\n// Final check: resolved path must stay inside destDir\nif (!path.resolve(filePath).startsWith(path.resolve(destDir) + path.sep) && path.resolve(filePath) !== path.resolve(destDir)) {\n  throw new Error('Path traversal rejected');\n}\n\nfs.writeFileSync(filePath, content);\n\nreturn [{ json: { status: 'saved_for_batch', path: filePath, filename } }];"
+      },
+      "id": "code-save-batch",
+      "name": "Save to Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 420]
+    }
+  ],
+  "connections": {
+    "Webhook Docmail": {
+      "main": [[{"node": "Auth Check", "type": "main", "index": 0}]]
+    },
+    "Auth Check": {
+      "main": [[{"node": "Is Instant?", "type": "main", "index": 0}]]
+    },
+    "Is Instant?": {
+      "main": [
+        [{"node": "Save Instant File", "type": "main", "index": 0}],
+        [{"node": "Save to Batch", "type": "main", "index": 0}]
+      ]
+    },
+    "Save Instant File": {
+      "main": [[{"node": "Email Instant", "type": "main", "index": 0}]]
+    },
+    "Email Instant": {
+      "main": [[{"node": "Archive + Respond", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris"
+  }
+}

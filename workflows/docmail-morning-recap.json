@@ -1,0 +1,113 @@
+{
+  "id": "docmail-morning-recap",
+  "name": "Docmail Morning Recap",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "schedule-8h",
+      "name": "Schedule 8h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\n// UPDATE THIS PATH to match your n8n server's docmail directory\nconst dir = '/home/node/docmail';\n\nif (!fs.existsSync(dir)) {\n  return [{ json: { files: [], count: 0 } }];\n}\n\nconst fileNames = fs.readdirSync(dir)\n  .filter(f => f.startsWith('docmail_') && f.endsWith('.html'));\n\nif (fileNames.length === 0) {\n  return [{ json: { files: [], count: 0 } }];\n}\n\nconst item = {\n  json: {\n    count: fileNames.length,\n    allFiles: fileNames.join(', '),\n    fileNames: fileNames,\n    attachmentKeys: fileNames.map((_, i) => 'file_' + i).join(',')\n  },\n  binary: {}\n};\n\nfor (let i = 0; i < fileNames.length; i++) {\n  const filePath = path.join(dir, fileNames[i]);\n  const content = fs.readFileSync(filePath);\n  item.binary['file_' + i] = {\n    data: content.toString('base64'),\n    mimeType: 'text/html',\n    fileName: fileNames[i]\n  };\n}\n\nreturn [item];"
+      },
+      "id": "code-list-files",
+      "name": "List Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-hasfiles",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-files",
+      "name": "Has Files?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SMTP_USER }}",
+        "toEmail": "={{ $env.SMTP_USER }}",
+        "subject": "=[Docmail Recap] {{ $json.count }} document(s) — {{ $now.format('dd/MM/yyyy') }}",
+        "text": "Recap matinal — {{ $json.count }} document(s) en piece jointe.\n\nFichiers: {{ $json.allFiles }}",
+        "options": {
+          "attachments": "={{ $json.attachmentKeys }}"
+        }
+      },
+      "id": "email-recap",
+      "name": "Email Recap",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [920, 200],
+      "credentials": {
+        "smtp": {
+          "id": "YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\n// UPDATE THIS PATH to match your n8n server's docmail directory\nconst dir = '/home/node/docmail';\nconst archiveDir = '/home/node/docmail/archive';\n\nif (!fs.existsSync(archiveDir)) {\n  fs.mkdirSync(archiveDir, { recursive: true });\n}\n\nconst fileNames = $json.fileNames || [];\nconst archived = [];\nfor (const fileName of fileNames) {\n  const src = path.join(dir, fileName);\n  const dst = path.join(archiveDir, fileName);\n  if (fs.existsSync(src)) {\n    fs.renameSync(src, dst);\n    archived.push(fileName);\n  }\n}\n\nreturn [{ json: { archived, count: archived.length } }];"
+      },
+      "id": "code-archive",
+      "name": "Archive Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 200]
+    }
+  ],
+  "connections": {
+    "Schedule 8h": {
+      "main": [[{"node": "List Files", "type": "main", "index": 0}]]
+    },
+    "List Files": {
+      "main": [[{"node": "Has Files?", "type": "main", "index": 0}]]
+    },
+    "Has Files?": {
+      "main": [
+        [{"node": "Email Recap", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Email Recap": {
+      "main": [[{"node": "Archive Files", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris"
+  }
+}
