@@ -36,47 +36,47 @@ Claude Code (terminal)
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 - [n8n](https://n8n.io/) self-hosted instance with SMTP credentials configured
-- A machine to generate documents (your dev machine)
 - A webhook-reachable n8n server (LAN, VPN, or public with HTTPS)
+- `openssl` (for token generation — installed on most systems)
 
-## Quick start
+## Install
 
 ```bash
 # 1. Clone
 git clone https://github.com/YOUR_USERNAME/docmail.git
 cd docmail
 
-# 2. Configure
-cp docmail.conf.example ~/docmail.conf
-nano ~/docmail.conf          # Fill in your values
-chmod 600 ~/docmail.conf     # Protect credentials
+# 2. Create your config (copies the template to ~/docmail.conf)
+bash install.sh --init
 
-# 3. Generate patched files
-bash setup.sh
+# 3. Edit with your values
+nano ~/docmail.conf
 
-# 4. Install the skill
-mkdir -p ~/.claude/skills/docmail
-cp skill/SKILL.local.md ~/.claude/skills/docmail/SKILL.md
+# 4. Run the installer
+bash install.sh
+```
 
-# 5. Set up n8n
-#    - Import workflows/docmail-receiver.local.json
-#    - Import workflows/docmail-morning-recap.local.json
-#    - Set env vars: DOCMAIL_TOKEN, SMTP_USER
-#    - Create server directory: mkdir -p /your/docmail/dir/archive
-#    - Activate both workflows
+The installer will:
+- Validate your config (catches placeholder values left unchanged)
+- Create local directories (output + secrets)
+- Generate an auth token (if none exists)
+- Patch all placeholders with your values
+- Install the skill directly into `~/.claude/skills/docmail/`
 
-# 6. Generate your token
-openssl rand -hex 32 > ~/path/to/secrets/DOCMAIL_TOKEN
-# Set the same value as DOCMAIL_TOKEN env var in n8n
+After that, you just need to set up the n8n side (the installer prints the exact steps).
 
-# 7. Test
-# In Claude Code:
-#   /docmail now test setup
+### WSL / Git Bash note
+
+If you get `\r` errors, fix line endings first:
+
+```bash
+sed -i 's/\r$//' install.sh
+bash install.sh
 ```
 
 ## Configuration
 
-See [`docmail.conf.example`](docmail.conf.example) for all options.
+All config lives in `~/docmail.conf` (or wherever `$DOCMAIL_CONF` points). See [`docmail.conf.example`](docmail.conf.example) for all options.
 
 | Variable | Required | Description |
 |---|---|---|
@@ -116,13 +116,14 @@ The generated HTML uses a self-contained design system optimized for email:
 - Filename sanitization + path traversal rejection
 - No secrets in generated documents (enforced by skill rules)
 - Token file stores bare value only (no `KEY=value` format)
+- Config file permissions: `600` (owner-only read/write)
 
 ## File structure
 
 ```
 docmail/
+├── install.sh                    # One-command installer
 ├── docmail.conf.example          # Config template (committed)
-├── setup.sh                      # Patches placeholders from config
 ├── skill/
 │   └── SKILL.md                  # Claude Code skill (generic)
 └── workflows/
@@ -130,7 +131,14 @@ docmail/
     └── docmail-morning-recap.json # n8n: cron → batch email
 ```
 
-After running `setup.sh`, `.local.md` and `.local.json` files are generated with your values (gitignored).
+After running `install.sh`:
+- `skill/SKILL.local.md` and `workflows/*.local.json` are generated (gitignored)
+- The skill is copied to `~/.claude/skills/docmail/SKILL.md`
+- A token is generated in your secrets directory
+
+## Updating
+
+After a `git pull`, re-run `bash install.sh` to re-patch files with any upstream changes. Your `~/docmail.conf` and token are untouched.
 
 ## License
 
