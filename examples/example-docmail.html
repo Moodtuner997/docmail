@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docmail — Session recap example</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { max-width: 480px; margin: 0 auto; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #1a2a3a; background: #f0f4f8; }
+h1 { font-family: Georgia, 'Times New Roman', serif; font-size: 22px; font-weight: 700; color: #1a2a3a; margin-bottom: 4px; }
+h2 { font-size: 17px; font-weight: 700; color: #e05848; margin-top: 28px; border-bottom: 1px solid #d0dce8; padding-bottom: 6px; margin-bottom: 12px; }
+h3 { font-size: 15px; font-weight: 600; color: #1a2a3a; margin-bottom: 6px; }
+p { margin-bottom: 8px; }
+.subtitle { font-size: 13px; color: #6b8299; border-bottom: 2px solid #e05848; padding-bottom: 12px; margin-bottom: 20px; }
+.section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #e05848; margin-bottom: 6px; }
+.card { background: #fff; border: 1px solid #d0dce8; border-radius: 6px; padding: 14px; margin-bottom: 12px; }
+.card-accent { border-left: 4px solid #e05848; }
+.card-context { border-left: 4px solid #2563eb; background: #eff6ff; }
+.card-green { border-left: 4px solid #2d8a4e; }
+.label { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; }
+.label-green { background: #dcfce7; color: #166534; }
+.label-orange { background: #fef3c7; color: #92400e; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat { text-align: center; padding: 10px; }
+.stat-value { font-size: 24px; font-weight: 700; color: #e05848; }
+.stat-label { font-size: 10px; color: #6b8299; text-transform: uppercase; letter-spacing: 0.5px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 10px; }
+th { text-align: left; font-weight: 700; color: #6b8299; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; padding: 6px 8px; border-bottom: 2px solid #d0dce8; }
+td { padding: 8px; border-bottom: 1px solid #e8eef4; vertical-align: top; }
+.timeline-item { padding-left: 20px; border-left: 2px solid #d0dce8; margin-bottom: 10px; position: relative; }
+.timeline-item::before { content: ''; position: absolute; left: -5px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: #e05848; }
+.timeline-time { font-size: 13px; font-weight: 600; color: #e05848; }
+.timeline-text { font-size: 13px; color: #3a4a5a; }
+.mono { font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 12px; background: #e8eef4; padding: 1px 5px; border-radius: 3px; color: #1a2a3a; }
+.section-note { font-size: 12px; color: #6b8299; font-style: italic; margin-top: 6px; margin-bottom: 14px; }
+footer { margin-top: 32px; padding-top: 16px; border-top: 2px solid #d0dce8; font-size: 11px; color: #8a9ab0; text-align: center; }
+@media print { body { background: #fff; max-width: 100%; } .card { break-inside: avoid; } h2 { break-after: avoid; } }
+</style>
+</head>
+<body>
+
+<!-- 1. Header -->
+<h1>Session recap &mdash; Atlas API</h1>
+<div class="subtitle">/docmail &bull; atlas &bull; Monday, April 6th</div>
+
+<!-- 2. Timeless recap -->
+<div class="card card-context">
+  <div class="section-label">Context</div>
+  <p>Atlas is a small REST API that aggregates hiking trail data from open datasets and serves it to a mobile client. Stack: FastAPI + PostgreSQL, deployed on a self-hosted VPS.</p>
+</div>
+
+<!-- 3. Triptych -->
+<div class="card card-accent">
+  <div class="section-label">Triptych</div>
+  <h3>Problem</h3>
+  <p>Trail search endpoint timed out on queries covering more than one region.</p>
+  <h3>Reasoning</h3>
+  <p>The query joined three tables without an index on <span class="mono">region_id</span>; every search scanned the full trails table.</p>
+  <h3>Solutions</h3>
+  <p>Added a composite index, capped results at 200 per page. p95 latency back under 300ms.</p>
+</div>
+
+<!-- 4. Timestamp -->
+<div class="section-note">
+  Monday, April 6th &mdash; session started at 2:00pm, docmail generated at 3:40pm
+</div>
+
+<!-- 5. Content -->
+<h2>Key numbers</h2>
+<div class="card">
+  <div class="grid-2">
+    <div class="stat">
+      <div class="stat-value">4.2s &rarr; 0.3s</div>
+      <div class="stat-label">p95 search latency</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">3</div>
+      <div class="stat-label">migrations shipped</div>
+    </div>
+  </div>
+</div>
+
+<h2>What happened</h2>
+<div class="timeline-item">
+  <div class="timeline-time">2:00pm</div>
+  <div class="timeline-text">Reproduced the timeout with a two-region search on staging data.</div>
+</div>
+<div class="timeline-item">
+  <div class="timeline-time">2:25pm</div>
+  <div class="timeline-text">EXPLAIN ANALYZE showed a sequential scan on <span class="mono">trails</span> (410k rows).</div>
+</div>
+<div class="timeline-item">
+  <div class="timeline-time">3:05pm</div>
+  <div class="timeline-text">Composite index migration + pagination cap. Tests green.</div>
+</div>
+
+<h2>State of play</h2>
+<div class="card card-green">
+  <span class="label label-green">Done</span>
+  <p>Index migration deployed, search endpoint fast on all regions.</p>
+</div>
+<div class="card">
+  <span class="label label-orange">Next</span>
+  <p>Add a load test to CI so the regression cannot come back silently.</p>
+</div>
+
+<h2>Decisions</h2>
+<table>
+  <tr><th>Decision</th><th>Status</th></tr>
+  <tr><td>Cap search results at 200/page</td><td>Verified (test)</td></tr>
+  <tr><td>Composite index over partial index</td><td>Verified (EXPLAIN)</td></tr>
+  <tr><td>Skip caching layer for now</td><td>Assumed &mdash; revisit if traffic grows</td></tr>
+</table>
+
+<!-- 6. Technical signature -->
+<footer>
+  Generated by Claude Code &bull; example document &bull; April 6th
+  <br>Project: atlas &bull; Branch: fix/search-timeout
+</footer>
+
+</body>
+</html>

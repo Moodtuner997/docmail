@@ -10,6 +10,7 @@
 
 # Generated documents
 *.html
+!examples/*.html
 
 # OS
 Thumbs.db
