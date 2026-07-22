@@ -1,227 +1,172 @@
 ---
 name: docmail
-description: "Use when user says /docmail or asks to generate a document for email. Supports batch (morning 8h) and instant modes."
+description: "Generates a newsletter-format HTML email (6-section standard) and routes it through a secure webhook with secret scanning. Triggers: user says /docmail, /docmail now, /docmail arbitrage, or asks to 'generate a doc for email', 'session recap email'. Modes: instant, batch (morning cron), arbitrage snapshot."
 user-invocable: true
-allowed-tools: Read, Write, Bash, Glob
+allowed-tools: Read, Write, Bash, Glob, Grep
 ---
 
 # Docmail — Generate and Send Documents
 
+Generate ONE HTML document. Save it to the queue. Send it through `scripts/send-webhook.sh`.
+
+Email = readable newsletter + HTML attachment. Max 1 document per invocation.
+
+## Configuration
+
+All runtime values come from your config file (`~/docmail.conf` by default, see `docmail.conf.example`).
+Never hardcode secrets in documents or scripts.
+
+| Key | Type | Usage |
+|---|---|---|
+| `DOCMAIL_HOME` | config | Base directory. Contains `queue/`, `sent/`, `failed/` |
+| `DOCMAIL_WEBHOOK_URL` | config / env var | Full POST endpoint of your webhook (e.g. `https://YOUR_HOST/webhook/docmail`) |
+| `DOCMAIL_TOKEN` | env var / secrets file | Bearer token expected by the webhook. Loaded from `$DOCMAIL_SECRETS_DIR/DOCMAIL_TOKEN` (never committed, never displayed) |
+
+**Document lifecycle:**
+- `<YOUR_DOCMAIL_HOME>/queue/` — HTML files waiting to be sent
+- `<YOUR_DOCMAIL_HOME>/sent/` — confirmed sent (HTTP 2xx) + `.sent` marker
+- `<YOUR_DOCMAIL_HOME>/failed/` — blocked (secret detected) or failed (non-2xx) + logs
+
+**Behavior per mode:**
+- `instant` / `arbitrage` — immediate send via `scripts/send-webhook.sh`. The email arrives within a minute.
+- `batch` — file dropped in `queue/`, sent as a bundle by the next morning cron (see README, "Morning recap").
+
 ## Arguments
 
-Parse the user's arguments in order:
-1. If the first word is `now`, set MODE=instant, consume it
-2. If the next word matches a VOICE name (see below), set VOICE=that name, consume it
-3. Rest of args = INSTRUCTIONS
+Strict positional parsing. Word 1 is the ONLY candidate for MODE. Word 2 is the ONLY
+candidate for VOICE. Everything else = INSTRUCTIONS (even if it contains "now" or a voice name).
 
-Examples:
-- `/docmail recap session` → batch, no voice, "recap session"
-- `/docmail now synthese moodtune` → instant, no voice, "synthese moodtune"
-- `/docmail tony recap session` → batch, voice=Tony Soprano, "recap session"
-- `/docmail now gandalf synthese projet` → instant, voice=Gandalf, "synthese projet"
+1. `$1` == `now` exactly -> MODE=instant ; `$1` == `arbitrage` exactly -> MODE=arbitrage ; otherwise MODE=batch (and `$1` is part of INSTRUCTIONS).
+2. If MODE != batch AND `$2` is in the voice table below -> VOICE=$2, INSTRUCTIONS=`$3..$n`.
+3. Otherwise INSTRUCTIONS=`$2..$n` (or `$1..$n` if MODE=batch).
+
+| Example | Mode | Voice | Instructions |
+|---|---|---|---|
+| `/docmail session recap` | batch | — | "session recap" |
+| `/docmail now project summary` | instant | — | "project summary" |
+| `/docmail now tommy sprint plan` | instant | tommy | "sprint plan" |
+| `/docmail now tony now` | instant | tony | "now" (2nd "now" = content) |
+| `/docmail arbitrage` | arbitrage | — | current conversation |
 
 ## Voices (optional)
 
-Reference: `<YOUR_VOICE_DEFINITIONS_PATH>/voix-explicatives.md`
+Optional extra definitions: `<YOUR_VOICE_DEFINITIONS_PATH>` (leave unset to use the table below only).
 
-If VOICE is set, the document content adopts the personality's tone and formulations while keeping the information factual. The voice applies to PROSE SECTIONS only (intros, summaries, commentary) — not to data tables, lists of facts, or technical specs.
+The voice applies to PROSE SECTIONS only (intro, transitions, conclusion). Never to data, tables or facts.
 
-| Trigger word | Personality | Style |
+| Word | Personality | Style |
 |---|---|---|
-| `tony` | Tony Soprano | Boss qui brief. "Ecoute-moi bien", "Capisce?", organigramme familial |
-| `arthur` | Arthur Pendragon (Kaamelott) | Roi exaspere. "C'est pas POSSIBLE", demystification, medievalisme |
-| `walter` | Walter White | Chimiste obsede. "Laisse-moi t'expliquer", precision, zero approximation |
-| `gandalf` | Gandalf | Sage perspectif. "Des forces sont en mouvement", patience, long-terme |
-| `papacito` | Papacito | Coach direct. "La base.", "Le mec qui...", programme muscu |
-| `tommy` | Tommy Shelby | Stratege froid. "Here's what we do", ordres, pas de questions |
-| `geralt` | Geralt de Riv | Pragmatique laconique. "Hmm.", "Le moindre mal", phrases courtes |
-| `luffy` | Luffy | Enthousiaste pur. "OI!", "On y va!", aventure, viande |
+| `tony` | Tony Soprano | "Listen to me", family org chart, boss briefing |
+| `arthur` | Arthur Pendragon (Kaamelott) | Exasperated king, demystification |
+| `walter` | Walter White | Precision, zero approximation |
+| `gandalf` | Gandalf | Patience, long-term, wisdom |
+| `papacito` | Papacito | "The basics.", direct coach |
+| `tommy` | Tommy Shelby | "Here's what we do", cold orders |
+| `geralt` | Geralt of Rivia | "Hmm.", laconic pragmatism |
+| `luffy` | Luffy | "OI!", enthusiasm, adventure |
 
-If no voice matches, ignore and treat the word as part of INSTRUCTIONS.
+If no voice matches, treat the word as INSTRUCTIONS.
 
-### Voice application rules
-- Intro paragraph: fully in character (1-3 phrases)
-- Section transitions: light touches of the character's lexique
-- Conclusions: back in character for the closing
-- Data/facts/tables: neutral, no character embellishment
-- If the voice feels forced on the content, drop it and write naturally
+### Voice rules
+- Intro: in character (1-3 sentences)
+- Transitions: light touches of the character's vocabulary
+- Conclusion: back in character
+- Data/tables: neutral, never in character
+- If the voice feels forced on the content -> write naturally
+- If VOICE is set, add a footer note: `Written in [personality] mode`
 
-## Step 1 — Generate the document
+---
 
-Based on INSTRUCTIONS (and optional VOICE), generate a self-contained HTML document following the design system below.
+## ARBITRAGE mode
 
-### Foundations
-- Inline CSS only (no external stylesheets, no CDN fonts)
-- NO external dependencies — renders perfectly offline and as email attachment
-- `<meta charset="UTF-8">` + `<meta name="viewport" content="width=device-width, initial-scale=1.0">`
-- Accented characters: use HTML entities (`&eacute;`, `&agrave;`, `&ccedil;`, `&ocirc;`, `&egrave;`, `&ucirc;`, `&icirc;`, `&euml;`) — never raw UTF-8 accents
-- If VOICE is set, add a subtle footer note: `Redige en mode [personality name]`
+When `MODE=arbitrage`, the document is a decision snapshot of the current conversation:
 
-### Layout
-- `max-width: 480px; margin: 0 auto; padding: 16px` (mobile-first, optimized for modern smartphones)
+1. **Review the conversation** for decisions that were made. For each decision, classify it:
+   - **Verified** — backed by a test, a diff, a log, a measurement
+   - **Assumed** — treated as true without evidence ("it should work", "it's always like that")
+2. **Capture the output**: decisions detected, classification, recommendations (which assumptions to verify first).
+3. **Generate the docmail** with the standard format (see references/), content = the snapshot.
+4. **Subject** = "Arbitrage — [project or context]".
+
+If you have a dedicated decision-review skill installed, invoke it instead of the manual checklist and capture its output.
+
+This turns an ephemeral decision analysis into a persistent document.
+
+---
+
+## Format and design system
+
+**MANDATORY — read BEFORE generating the HTML:**
+
+- `references/format-standard.md` — the 6-section structure every docmail must follow
+- `references/design-system.md` — the exact classes and colors. Do not reinvent styles.
+
+**Key reminders:**
+- Inline CSS only, zero external dependencies (no CDN, no Google Fonts)
+- `max-width: 480px` (mobile-first)
+- HTML entities for accented characters (`&eacute;` not `é`)
 - `box-sizing: border-box` on `*`
-- `@media print { body { background: #fff; max-width: 100%; } .card { break-inside: avoid; } h2 { break-after: avoid; } }`
+- Background `#f0f4f8` (ice), accent `#e05848` (coral), cards `#fff`, borders `#d0dce8`
+- h1 headings: `Georgia, serif`. Body: `-apple-system, sans-serif`
+- Section labels: uppercase, `letter-spacing: 1.5px`, coral
 
-### Typography
-- Font stack: `-apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif` (body AND headings)
-- Body: `font-size: 15px; line-height: 1.6; color: #1a1a1a`
-- h1: `22px, weight 700, margin-bottom 4px`
-- h2: `17px, weight 700, color #a34338, margin-top 28px, border-bottom 1px solid #e0ddd8`
-- h3: `15px, weight 600, color #333`
-- `.subtitle`: `13px, color #666, border-bottom 2px solid #a34338` (below h1)
+---
 
-### Colors
-- Background: `#faf9f6` (cream)
-- Text: `#1a1a1a`
-- Accent: `#a34338` (terracotta) — headings, borders, stat values
-- Cards: `#fff` background, `1px solid #e0ddd8` border, `border-radius: 10px`, `padding: 14px`
-- Subtle text: `#666`
-- Dividers: `#e0ddd8` (light) / `#f0eeea` (table rows)
+## Step 1 — Generate the HTML
 
-### Components (use as needed based on content)
-
-**Cards** — Primary content container
-```css
-.card { background: #fff; border: 1px solid #e0ddd8; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
-.card-accent { border-left: 4px solid #a34338; }  /* important/primary */
-.card-green { border-left: 4px solid #2d8a4e; }   /* success/active */
-.card-blue { border-left: 4px solid #2563eb; }     /* info/secondary */
-.card-orange { border-left: 4px solid #d97706; }   /* warning/pending */
-```
-
-**Labels** — Status badges inline
-```css
-.label { display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; }
-.label-green { background: #dcfce7; color: #166534; }   /* done/active/ok */
-.label-blue { background: #dbeafe; color: #1e40af; }     /* info */
-.label-orange { background: #fef3c7; color: #92400e; }   /* in progress */
-.label-red { background: #fee2e2; color: #991b1b; }       /* error/critical */
-.label-gray { background: #f3f4f6; color: #374151; }      /* pending/neutral */
-```
-
-**Stat grid** — Key numbers (2 columns)
-```css
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.stat { text-align: center; padding: 10px; }
-.stat-value { font-size: 24px; font-weight: 700; color: #a34338; }
-.stat-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.3px; }
-```
-
-**Tables** — Data display
-```css
-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 10px; }
-th { text-align: left; font-weight: 600; color: #666; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; padding: 6px 8px; border-bottom: 2px solid #e0ddd8; }
-td { padding: 8px; border-bottom: 1px solid #f0eeea; vertical-align: top; }
-```
-
-**Timeline** — Chronological items
-```css
-.timeline-item { padding-left: 20px; border-left: 2px solid #e0ddd8; margin-bottom: 10px; position: relative; }
-.timeline-item::before { content: ''; position: absolute; left: -5px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: #a34338; }
-.timeline-time { font-size: 13px; font-weight: 600; color: #a34338; }
-.timeline-text { font-size: 13px; color: #444; }
-```
-
-**Flow steps** — Sequential process
-```css
-.flow-step { display: flex; align-items: flex-start; margin-bottom: 8px; }
-.flow-icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; margin-right: 10px; background: #f3f2ef; }
-.flow-text { flex: 1; font-size: 14px; padding-top: 4px; }
-.flow-arrow { text-align: center; color: #a34338; font-size: 18px; margin: 2px 0 2px 11px; }
-```
-
-**Access rows** — Permission display
-```css
-.access-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0eeea; font-size: 13px; }
-.access-badge { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 3px; }
-.access-public { background: #fee2e2; color: #991b1b; }
-.access-private { background: #dcfce7; color: #166534; }
-.access-blocked { background: #f3f4f6; color: #374151; }
-```
-
-**Mono** — Code/technical values inline
-```css
-.mono { font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 12px; background: #f3f2ef; padding: 1px 5px; border-radius: 3px; }
-```
-
-**Section note** — Subtle footnote under a card
-```css
-.section-note { font-size: 12px; color: #888; font-style: italic; margin-top: 6px; }
-```
-
-**Footer**
-```css
-footer { margin-top: 32px; padding-top: 16px; border-top: 2px solid #e0ddd8; font-size: 11px; color: #999; text-align: center; }
-```
-
-### Component selection guide
-Pick components based on content type — don't use all of them:
-- **Numbers/KPIs** → stat grid
-- **Status/state** → labels inside cards
-- **Chronological events** → timeline
-- **Step-by-step process** → flow steps
-- **Data rows** → tables
-- **Permissions/access** → access rows
-- **Key info blocks** → cards (with accent color matching importance)
-- **Technical values** → mono spans
+1. Scan the LAST 40 TURNS of conversation maximum (not the whole session — costly and dilutes the signal). If the user asks for a broader recap, scan up to 80 turns.
+2. If a project is identifiable and you keep per-project context notes, read them for the timeless recap section.
+3. Generate the HTML with the standard format (`references/format-standard.md`) + design system.
+4. The HTML must be readable as an email body AND as an attachment:
+   - Inline CSS only, no base64 images unless explicitly requested
+   - Tables for layout if divs break in email clients
 
 ## Step 2 — Name and save
 
 Convention: `docmail_<theme>_<context>_<DDMMYY>.html`
-- theme: 1 word describing the type (synthese, todos, onesheet, recap, specs, notes)
-- context: 1 word for the project or subject
+- theme: 1 word (synthesis, recap, arbitrage, todos, onesheet, specs, notes)
+- context: 1 word for the project/subject
 - DDMMYY: today's date
 
-Save to: `<YOUR_DOCMAIL_OUTPUT_DIR>/<filename>`
-
-Use the Write tool to create the file.
+Save to: `<YOUR_DOCMAIL_HOME>/queue/<filename>` (always `queue/`, never the base directory).
+After a confirmed 2xx, `send-webhook.sh` moves the file to `sent/` and creates the `.sent` marker.
+Readable state at any time: `ls queue/` -> waiting ; `ls sent/` -> delivered to the webhook.
 
 ## Step 3 — Send or queue
 
-### If MODE=instant
-
-1. Read the file content and POST to your webhook as JSON:
 ```bash
-TOKEN=$(cat "<YOUR_SECRETS_DIR>/DOCMAIL_TOKEN" | tr -d '\r\n') && CONTENT=$(cat "<YOUR_DOCMAIL_OUTPUT_DIR>/<filename>" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))") && curl -s -X POST <YOUR_WEBHOOK_URL>/docmail -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "{\"mode\":\"instant\",\"filename\":\"<filename>\",\"subject\":\"<theme> <context>\",\"content\":$CONTENT}"
+bash ~/.claude/skills/docmail/scripts/send-webhook.sh "<filename.html>" "<instant|batch>" "[Docmail] <subject>"
 ```
 
-2. Create sent marker:
-```bash
-touch "<YOUR_DOCMAIL_OUTPUT_DIR>/<filename>.sent"
-```
+**The MODE (argument 2) is MANDATORY.** Without it the script silently defaults to `batch`
+and the email only leaves at the next morning cron — while the user expected a `now`.
+`MODE=instant` or `arbitrage` -> pass `"instant"`.
 
-3. Confirm to user: "Document envoye par mail (instantane)."
+The script scans for secrets, parses the HTTP status, and only creates the `.sent` marker
+after a confirmed 2xx. After sending: **remember that 2xx = the webhook received the POST,
+not proof the email was delivered.** Check the inbox before declaring "sent".
+
+> **Argument 1 = FILENAME ONLY** (e.g. `docmail_recap_myproject_210726.html`), never the full
+> path: the script prefixes `queue/` itself. Passing an absolute path doubles the prefix -> "file not found".
+
+Confirm to the user based on exit code:
+- `0` -> "Document sent (instant)." or "Document queued for the morning recap." (batch)
+- `1` -> "BLOCKED: secret detected in the document. File moved to failed/. Fix and retry."
+- `2` -> "Webhook failed (non-2xx). File stays in queue/ and will be retried by the next cron."
 
 ### If MODE=batch
 
-1. Read the file content and POST to webhook as JSON (same as instant but with mode=batch):
-```bash
-TOKEN=$(cat "<YOUR_SECRETS_DIR>/DOCMAIL_TOKEN" | tr -d '\r\n') && CONTENT=$(cat "<YOUR_DOCMAIL_OUTPUT_DIR>/<filename>" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))") && curl -s -X POST <YOUR_WEBHOOK_URL>/docmail -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "{\"mode\":\"batch\",\"filename\":\"<filename>\",\"subject\":\"<theme> <context>\",\"content\":$CONTENT}"
-```
+The file stays in `queue/`; the morning cron calls `send-webhook.sh` for each `.html`.
+Confirm: "Document waiting in queue/. It will be sent in the morning recap."
 
-2. Create sent marker:
-```bash
-touch "<YOUR_DOCMAIL_OUTPUT_DIR>/<filename>.sent"
-```
-
-3. Confirm to user: "Document sauvegarde et uploade sur le VPS. Il sera envoye dans le recap de 8h."
-
-Note: A scheduled task (e.g. daily at 7h) can serve as backup in case the upload fails here.
+---
 
 ## Rules
 
-- NEVER include sensitive data (API keys, passwords, tokens, SSH keys) in generated documents
-- Always use inline CSS — no CDN, no Google Fonts links
-- Keep filenames lowercase, no spaces, underscores only
+- **NEVER** include sensitive data (API keys, tokens, passwords, private key paths, secret-store paths)
+- **ALWAYS** the standard format (the 6 sections). No exceptions.
+- **ALWAYS** inline CSS — zero CDN, zero Google Fonts
+- **NEVER** create a `.sent` marker manually — only the script does, on confirmed 2xx
+- Filenames: lowercase, underscores, no spaces
 - One document per invocation
-- If the instructions mention a conversation or session, scan the conversation context to extract the relevant information
-- The HTML should look good both in a browser and as an email attachment
-
-## Setup Guide
-
-To use this skill, you need to configure the following:
-1. **Output directory** — where generated HTML files are saved (replace `<YOUR_DOCMAIL_OUTPUT_DIR>`)
-2. **Secrets directory** — where your webhook token is stored (replace `<YOUR_SECRETS_DIR>`)
-3. **Webhook URL** — your HTTP endpoint that receives documents (replace `<YOUR_WEBHOOK_URL>`)
-4. **Voice definitions** (optional) — a file defining voice personalities (replace `<YOUR_VOICE_DEFINITIONS_PATH>`)
-5. **Scheduled sender** (optional) — a cron/task scheduler to send batch documents at a fixed time
+- If the instructions mention a session/conversation -> scan the conversation context

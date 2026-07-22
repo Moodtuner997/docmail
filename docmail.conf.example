@@ -6,18 +6,19 @@
 
 # ── Local paths ──────────────────────────────
 
-# Directory where generated HTML documents are saved locally
-DOCMAIL_OUTPUT_DIR="/path/to/docmail/output"
+# Base directory for documents. The installer creates queue/, sent/, failed/ inside it.
+DOCMAIL_HOME="/path/to/docmail"
 
 # Directory containing the DOCMAIL_TOKEN file (bare value, no KEY= prefix)
 DOCMAIL_SECRETS_DIR="/path/to/secrets"
 
 # ── Webhook ──────────────────────────────────
 
-# Your n8n webhook URL (the /docmail endpoint)
-DOCMAIL_WEBHOOK_URL="https://your-n8n-host.example.com/webhook"
+# Full URL of your webhook endpoint (n8n, Node-RED, a tiny Flask app... anything
+# that accepts the JSON POST and sends the email).
+DOCMAIL_WEBHOOK_URL="https://your-n8n-host.example.com/webhook/docmail"
 
-# ── n8n server paths ─────────────────────────
+# ── n8n server paths (only if you use the bundled n8n workflows) ─────────────
 
 # Directory on the n8n server where documents are stored
 # This must match the path used in the n8n workflow Code nodes
@@ -32,7 +33,8 @@ N8N_SMTP_CREDENTIAL_NAME="SMTP account"
 
 # ── Optional ─────────────────────────────────
 
-# Voice definitions file for personality modes (leave empty to skip)
+# Extra voice definitions file for personality modes (leave empty to use the
+# built-in table in the skill)
 DOCMAIL_VOICE_DEFS=""
 
 # Timezone for the morning recap cron (IANA format)
