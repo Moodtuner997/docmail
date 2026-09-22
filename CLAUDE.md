@@ -40,3 +40,25 @@ Deploy of the receiver side: `install.sh` writes `workflows/*.local.json` (patch
 - Failed sends retry daily forever (the cron re-runs the sender on `queue/`); there is no cap.
 - Voice personalities apply to prose only, never to data/tables; add a "Written in X mode" footer when a voice is used.
 - Docs are English. Update `README.md` (Configuration table, File structure, FAQ) and `docmail.conf.example` together whenever a config key or script exit code changes.
+
+<!-- chaine-release -->
+## Versions and going live (fleet rule, 2026-09-22)
+
+The rule itself is in the global `CLAUDE.md`, section "Mise en ligne par release PR".
+What is specific to this repo:
+
+- **Commits are conventional commits**, refused at write time by the `commit-msg`
+  hook in `.git/hooks/`. The prefix is what release-please reads to compute the
+  version and write the changelog: a message off-format is a change missing from
+  the release notes.
+- **Version robot:** release-please, release type `simple`, config
+  `release-please-config.json` + `.release-please-manifest.json` at the root,
+  starting version `0.0.0`. It runs **on the laptop**, not as a GitHub Action:
+  Actions are billing-blocked on private repos since 2026-09-22 (runs fail in 3 s
+  with zero steps).
+- **One command**, from the workspace root: `bash scripts/release.sh docmail`.
+  It keeps the release PR up to date on `master`; once that PR is merged, the
+  same command tags, publishes the GitHub release, and stops there: tag and changelog only, nothing is deployed.
+- **Nothing reaches users until the release PR is merged**, and it is merged only
+  after the manual test run. That check is what opens the door, never a blind push.
+- **Where the versions live:** https://github.com/Moodtuner997/docmail/releases
