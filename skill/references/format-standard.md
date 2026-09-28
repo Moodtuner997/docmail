@@ -1,5 +1,12 @@
 # Mandatory standard format — Docmail
 
+## Writing style (Zinsser)
+
+Simplicity, brevity, clarity, humanity: strip every word that doesn't earn its place, prefer
+plain concrete verbs over jargon, and write as one person telling another what happened, not
+filing a report. Short sentences over long ones. If a clause can be cut without losing meaning,
+cut it.
+
 **Every docmail MUST contain these 6 sections in this order:**
 
 ## 1. Header
@@ -20,8 +27,10 @@
 This recap does not change from one docmail to the next for the same project. Read your project context notes if available.
 
 ## 3. Triptych
+Open with the conclusion (Minto pyramid): a one-line takeaway before the detail.
 ```html
 <div class="card card-accent">
+  <p><strong>[One-line conclusion]</strong></p>
   <h3>Problem</h3><p>1-2 lines</p>
   <h3>Reasoning</h3><p>1-3 simplified lines</p>
   <h3>Solutions</h3><p>In progress or proposed, 1-3 lines</p>
@@ -31,7 +40,7 @@ This recap does not change from one docmail to the next for the same project. Re
 ## 4. Timestamp
 ```html
 <div class="section-note">
-  Monday, April 3rd &mdash; session started at 2pm, docmail generated at 2:40pm
+  Monday, April 3rd. Session started at 2pm, docmail generated at 2:40pm
 </div>
 ```
 - Day of week spelled out, full date
@@ -39,7 +48,9 @@ This recap does not change from one docmail to the next for the same project. Re
 - Docmail generation time
 
 ## 5. Content
-The body of the docmail — specific to each invocation. Use the design system components (`design-system.md`) according to the content type.
+The body of the docmail — specific to each invocation. Open with the conclusion (Minto pyramid)
+before the supporting detail, same as section 3. Use the design system components
+(`design-system.md`) according to the content type.
 
 ## 6. Technical signature
 ```html
