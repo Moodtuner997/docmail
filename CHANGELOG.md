@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/Moodtuner997/docmail/compare/v1.0.0...v1.0.1) (2026-09-28)
+
+
+### Documentation
+
+* **claude:** bloc release réduit à une ligne, règle renvoyée au workspace ([97751fa](https://github.com/Moodtuner997/docmail/commit/97751fab56961647440aacb629dfd9336effe83e))
+* **skill:** règles de rédaction et conclusion d'abord ([#4](https://github.com/Moodtuner997/docmail/issues/4)) ([63b7376](https://github.com/Moodtuner997/docmail/commit/63b737661d86ae4fa3a72f57a3f2b5d3c1a7bfc1))
+
 ## 1.0.0 (2026-09-22)
 
 
