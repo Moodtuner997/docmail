@@ -45,5 +45,5 @@ Deploy of the receiver side: `install.sh` writes `workflows/*.local.json` (patch
 ## Release
 
 Fleet rule in the workspace `CLAUDE.md` (`../CLAUDE.md`, "Commits et release"). Here: release-please type
-`simple`, `bash scripts/release.sh docmail` from the workspace root; after the release PR is merged it
+`simple`, `.github/workflows/release.yml` on every push to `master` (GitHub-hosted runner, free on a public repo; prod: `bash scripts/release.sh docmail --prod` from the workspace root); it merges the release PR itself, then
 stops at tag + changelog, nothing is deployed. Versions: https://github.com/Moodtuner997/docmail/releases
