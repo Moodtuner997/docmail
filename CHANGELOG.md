@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/Moodtuner997/docmail/compare/v1.0.1...v1.0.2) (2026-10-01)
+
+
+### Documentation
+
+* **claude:** release tenue par l'Action release.yml ([70dc996](https://github.com/Moodtuner997/docmail/commit/70dc99671b9f1803faa5306e794e22a2cb8de133))
+
 ## [1.0.1](https://github.com/Moodtuner997/docmail/compare/v1.0.0...v1.0.1) (2026-09-28)
 
 
