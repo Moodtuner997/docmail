@@ -21,3 +21,6 @@ Thumbs.db
 *.swp
 *.local.md
 *.local.json
+
+# Idées : jamais dans un dépôt public
+IDEES.md
