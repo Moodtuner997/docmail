@@ -1,10 +1,12 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## What this is
+# CLAUDE.md — docmail
 
 Public MIT Claude Code skill: `/docmail` generates a 6-section newsletter-style HTML document, scans it for secrets, and POSTs it to a webhook that emails it (instantly or bundled into a morning recap). Bundled n8n workflows are the reference receiver; any JSON-accepting endpoint works.
+
+## Before any action
+
+- Public repo: everything committed is world-readable, history included. No personal paths, hosts, emails or tokens, in files or in commit messages; real values live only in `~/docmail.conf` (gitignored via `*.conf`) and `*.local.*` files. Private notes stay in `IDEES.md` (gitignored).
+- State lives in the issues and releases; there is no HANDOFF. Check reality first: `git fetch --prune`, `git status`, `git log -5 origin/master`.
+- A 2xx from the webhook only proves the POST was received, not that the mail left: confirm in the mailbox.
 
 ## Commands
 
@@ -33,17 +35,23 @@ Deploy of the receiver side: `install.sh` writes `workflows/*.local.json` (patch
 
 ## Conventions and gotchas
 
-- Public repo: keep everything user-agnostic. No personal paths, hosts, emails or tokens in committed files; real values live only in `~/docmail.conf` (gitignored via `*.conf`) and `*.local.*` files. `.gitignore` also drops `*.html` except `examples/`.
-- Mode argument 2 of `send-webhook.sh` is mandatory in practice: omitting it defaults to `batch` (the script warns on stderr); pass `instant` explicitly, otherwise the email only leaves with the morning cron.
+- `.gitignore` drops `*.html` except `examples/`.
+- Mode argument 2 of `send-webhook.sh` is mandatory in practice: omitting it defaults to `batch` (the script warns on stderr); pass `instant` explicitly, otherwise the email only leaves with the server-side morning recap.
 - Never create `.sent` markers by hand; only the script does, after a confirmed 2xx.
 - The secret-scan pattern list in `scan-secrets.sh` (OpenAI/Anthropic/GitHub/AWS/Google/Slack/GitLab/HF keys, JWTs, private-key blocks, `.ssh`/`.gnupg` paths) is the safety boundary before anything leaves the machine; extend it there, not in the skill prose.
-- Failed sends retry daily forever (the cron re-runs the sender on `queue/`); there is no cap.
+- A failed send stays in the local `queue/` and nothing retries it: no workflow calls `send-webhook.sh` and `install.sh` installs no scheduled task (the morning recap reads the n8n server's queue, not the local one). README and `SKILL.md` still say "the morning cron re-runs the sender": that is out of date, fix them together with any change here.
 - Voice personalities apply to prose only, never to data/tables; add a "Written in X mode" footer when a voice is used.
 - Docs are English. Update `README.md` (Configuration table, File structure, FAQ) and `docmail.conf.example` together whenever a config key or script exit code changes.
 
 <!-- chaine-release -->
 ## Release
 
-Fleet rule in the workspace `CLAUDE.md` (`../CLAUDE.md`, "Commits et release"). Here: release-please type
-`simple`, `.github/workflows/release.yml` on every push to `master` (GitHub-hosted runner, free on a public repo; prod: `bash scripts/release.sh docmail --prod` from the workspace root); it merges the release PR itself, then
-stops at tag + changelog, nothing is deployed. Versions: https://github.com/Moodtuner997/docmail/releases
+Single branch `master`. Conventional Commits (`<type>(<scope>): <description>`): release-please (type `simple`) builds the version and changelog from them. `.github/workflows/release.yml` runs on every push to `master` on a GitHub-hosted runner (never a self-hosted one on a public repo), merges the release PR itself and stops at tag + changelog; nothing is deployed. Versions: https://github.com/Moodtuner997/docmail/releases
+
+## Mistakes not to repeat
+
+- Do not read `$json` after an `emailSend` node: it holds the SMTP answer, Archive Files read `undefined`, nothing was archived and the recap re-sent the same documents every morning. Read the producer with `$('List Files').first().json` (c89a9be, 2026-05-23); a sanity check now throws when files were listed but none archived (6ea48d3).
+- Do not commit real values: the public v2 had to be made user-agnostic (3ffb5a4, 2026-07-22).
+- Do not keep private ideas in a tracked file: `IDEES.md` had to be gitignored (5cdbc7b, 2026-10-12).
+- Do not run a token-backed review workflow on this public repo: an automated review was removed (86f65fd, 2026-10-02).
+- Do not test against a live webhook without meaning it: `install.sh` writes files and the end-to-end check sends a real mail.
