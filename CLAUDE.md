@@ -1,57 +1,25 @@
-# CLAUDE.md — docmail
+# docmail
 
-Public MIT Claude Code skill: `/docmail` generates a 6-section newsletter-style HTML document, scans it for secrets, and POSTs it to a webhook that emails it (instantly or bundled into a morning recap). Bundled n8n workflows are the reference receiver; any JSON-accepting endpoint works.
+## Règles inconditionnelles
+- Dépôt public MIT : tout ce qui est commité se lit dans le monde entier, historique compris ; aucun chemin personnel, hôte, mail ni jeton, ni dans les fichiers ni dans les messages de commit ; les vraies valeurs vivent dans `~/docmail.conf` (ignoré) et les fichiers `*.local.*`.
+- Aucun envoi réel pendant une vérification : un 2xx du webhook prouve seulement que le POST est arrivé, pas que le mail est parti ; le contrôle de bout en bout (`/docmail now …`) envoie un vrai mail et demande l'accord écrit du propriétaire du dépôt.
+- `skill/scripts/scan-secrets.sh` est la frontière de sécurité avant tout envoi : on y étend les motifs, pas dans la prose du skill ; un marqueur `.sent` ne se crée jamais à la main.
+- Docs en anglais ; une clé de config ou un code de sortie qui change met à jour `README.md` (tableau Configuration, arborescence, FAQ) et `docmail.conf.example` dans la même PR.
+- Architecture, commandes, flux d'exécution, déploiement du récepteur n8n et conventions : `docs/architecture.md`.
 
-## Before any action
+<!-- gen:debut -->
+Dépôt `Moodtuner997/docmail` (projet `docmail`, docmail, statut actif). Déploiement : aucun (pas de déploiement).
+Avant toute action : `gh issue list --label etat` (l'issue État, vérité opérationnelle), `git fetch --prune`, `just --list` (points d'entrée uniformes : test, lint, dev, build, deploy-staging).
+Tâches = issues GitHub ; état du dépôt = issue épinglée État ; mémoire longue = nœud `02-projets/docmail.md` du second cerveau. Rien d'autre ne fait foi.
+Enveloppe : PR vers `dev`, fusion si CI verte ; `staging` et `main` n'avancent que par tag (release.yml, release.sh). Secrets jamais lus. Généré par scripts/claude-md-gen.py : ne pas éditer ce bloc.
+<!-- gen:fin -->
 
-- Public repo: everything committed is world-readable, history included. No personal paths, hosts, emails or tokens, in files or in commit messages; real values live only in `~/docmail.conf` (gitignored via `*.conf`) and `*.local.*` files. Private notes stay in `IDEES.md` (gitignored).
-- State lives in the issues and releases; there is no HANDOFF. Check reality first: `git fetch --prune`, `git status`, `git log -5 origin/master`.
-- A 2xx from the webhook only proves the POST was received, not that the mail left: confirm in the mailbox.
-
-## Commands
-
-```bash
-bash install.sh --init        # copy docmail.conf.example -> ~/docmail.conf (chmod 600), then edit it
-bash install.sh               # validate conf, create queue/sent/failed, generate token, patch + install skill
-shellcheck install.sh skill/scripts/*.sh   # lint (scripts already carry `# shellcheck source=/dev/null`)
-
-# manual send / scan (filename only, never a path — the script prefixes queue/ itself)
-bash ~/.claude/skills/docmail/scripts/send-webhook.sh docmail_recap_x_010126.html instant "[Docmail] subject"
-bash skill/scripts/scan-secrets.sh path/to/file.html      # exit 0 clean, 1 secret, 2 usage error
-```
-
-There is no test suite. Manual end-to-end check: `/docmail now test installation` from Claude Code, then confirm the email arrived (a 2xx only means the webhook received the POST).
-
-Deploy of the receiver side: `install.sh` writes `workflows/*.local.json` (patched paths, SMTP credential id, timezone, recap hour); import both into n8n (Settings > Import), set `DOCMAIL_TOKEN` and `SMTP_USER` env vars on the n8n host, `mkdir -p $N8N_DOCMAIL_DIR/archive`, activate both workflows.
-
-## Architecture
-
-- `skill/SKILL.md` is the generic skill source with `<YOUR_DOCMAIL_HOME>` / `<YOUR_VOICE_DEFINITIONS_PATH>` placeholders. `install.sh` seds it into `skill/SKILL.local.md` (gitignored) and copies that to `~/.claude/skills/docmail/SKILL.md` along with `references/` and `scripts/`. Edit `SKILL.md`, never the `.local` copy; re-run `install.sh` after any change.
-- `skill/references/format-standard.md` (mandatory 6 sections: header, timeless recap, problem/reasoning/solutions triptych, timestamp, content, technical signature) and `design-system.md` (Swiss Arctic + coral, inline CSS only, 480px, HTML entities for accents). The skill reads both before generating.
-- Argument parsing is strictly positional: word 1 is the only MODE candidate (`now` -> instant, `arbitrage`, else batch), word 2 the only VOICE candidate; everything else is instructions.
-- Execution flow: generate HTML -> save to `$DOCMAIL_HOME/queue/` -> `send-webhook.sh` runs `scan-secrets.sh` (hard gate; on hit the file moves to `failed/<name>.secret-blocked`, exit 1) -> builds JSON `{mode, filename, subject, content}` with `jq --rawfile` (python3 fallback) -> curl POST with Bearer token, 3 retries, one DNS-flush retry on HTTP 000 when `ipconfig` exists (Windows) -> on 2xx move to `sent/` and touch `.sent` marker (exit 0); otherwise file stays in `queue/`, response logged to `failed/<name>.http-<code>.log` (exit 2). Exit 3 = config/usage error.
-- Config precedence: `$DOCMAIL_CONF` (default `~/docmail.conf`) is sourced by both `install.sh` and `send-webhook.sh`; `DOCMAIL_TOKEN` env var wins over `$DOCMAIL_SECRETS_DIR/DOCMAIL_TOKEN` file. Required keys: `DOCMAIL_HOME`, `DOCMAIL_SECRETS_DIR`, `DOCMAIL_WEBHOOK_URL`. The installer rejects placeholder values (`/path/to/`, `example.com`, `your-`) and refuses the legacy key `DOCMAIL_OUTPUT_DIR`.
-- n8n side: `docmail-receiver.json` (webhook -> auth check -> instant: save + email + archive / batch: save to server queue) and `docmail-morning-recap.json` (schedule trigger at 8h -> list queued files -> one recap email -> archive). The installer patches `/home/node/docmail`, `YOUR_SMTP_CREDENTIAL_ID`, `"SMTP account"`, `Europe/Paris`, `"triggerAtHour": 8` — keep those literal strings intact in the committed JSON or the sed patching silently stops matching.
-
-## Conventions and gotchas
-
-- `.gitignore` drops `*.html` except `examples/`.
-- Mode argument 2 of `send-webhook.sh` is mandatory in practice: omitting it defaults to `batch` (the script warns on stderr); pass `instant` explicitly, otherwise the email only leaves with the server-side morning recap.
-- Never create `.sent` markers by hand; only the script does, after a confirmed 2xx.
-- The secret-scan pattern list in `scan-secrets.sh` (OpenAI/Anthropic/GitHub/AWS/Google/Slack/GitLab/HF keys, JWTs, private-key blocks, `.ssh`/`.gnupg` paths) is the safety boundary before anything leaves the machine; extend it there, not in the skill prose.
-- A failed send stays in the local `queue/` and nothing retries it: no workflow calls `send-webhook.sh` and `install.sh` installs no scheduled task (the morning recap reads the n8n server's queue, not the local one). README and `SKILL.md` still say "the morning cron re-runs the sender": that is out of date, fix them together with any change here.
-- Voice personalities apply to prose only, never to data/tables; add a "Written in X mode" footer when a voice is used.
-- Docs are English. Update `README.md` (Configuration table, File structure, FAQ) and `docmail.conf.example` together whenever a config key or script exit code changes.
-
-<!-- chaine-release -->
-## Release
-
-Single branch `master`. Conventional Commits (`<type>(<scope>): <description>`): release-please (type `simple`) builds the version and changelog from them. `.github/workflows/release.yml` runs on every push to `master` on a GitHub-hosted runner (never a self-hosted one on a public repo), merges the release PR itself and stops at tag + changelog; nothing is deployed. Versions: https://github.com/Moodtuner997/docmail/releases
-
-## Mistakes not to repeat
-
-- Do not read `$json` after an `emailSend` node: it holds the SMTP answer, Archive Files read `undefined`, nothing was archived and the recap re-sent the same documents every morning. Read the producer with `$('List Files').first().json` (c89a9be, 2026-05-23); a sanity check now throws when files were listed but none archived (6ea48d3).
-- Do not commit real values: the public v2 had to be made user-agnostic (3ffb5a4, 2026-07-22).
-- Do not keep private ideas in a tracked file: `IDEES.md` had to be gitignored (5cdbc7b, 2026-10-12).
-- Do not run a token-backed review workflow on this public repo: an automated review was removed (86f65fd, 2026-10-02).
-- Do not test against a live webhook without meaning it: `install.sh` writes files and the end-to-end check sends a real mail.
+## Pièges
+- `$json` après un nœud `emailSend` contient la réponse SMTP : rien n'était archivé et le récap renvoyait les mêmes documents chaque matin ; lire le producteur par `$('List Files').first().json` (c89a9be, 2026-05-23), garde-fou en 6ea48d3.
+- Les chaînes littérales `/home/node/docmail`, `YOUR_SMTP_CREDENTIAL_ID`, `"SMTP account"`, `Europe/Paris`, `"triggerAtHour": 8` des workflows doivent rester intactes, sinon le `sed` de `install.sh` ne les remplace plus sans erreur (6 lignes concernées par workflow, comptées le 2026-10-28).
+- `send-webhook.sh` sans 2ᵉ argument retombe sur `batch` (avertissement sur stderr seulement, ligne 20) : le mail ne part qu'au récap du lendemain ; toujours passer `instant`, et le nom de fichier seul, pas un chemin.
+- Un envoi raté reste dans `queue/` et rien ne le relance (aucun workflow n'appelle `send-webhook.sh`, `install.sh` ne planifie rien) ; README et `SKILL.md` disent encore « le cron du matin relance » : périmé (README ligne 124, SKILL.md lignes 159-160).
+- Aucun workflow à jeton (revue automatique) sur ce dépôt public, runner GitHub seulement (86f65fd, 2026-10-02).
+- `IDEES.md` reste ignoré, aucune idée privée dans un fichier suivi (5cdbc7b, 2026-10-12) ; `*.html` est ignoré hors `examples/`, donc un document généré ne se commite pas.
+- Le public v2 a dû être rendu neutre pour l'utilisateur après des valeurs réelles commitées (3ffb5a4, 2026-07-22) ; un chemin absolu de lecteur Windows ou du profil utilisateur dans un fichier suivi bloque aussi le push (gitleaks).
+- Messages de commit au format conventionnel, sinon ils disparaissent des releases ; `docs`, `ci`, `chore`, `test`, `style` sont masqués du changelog (`release-please-config.json`).
