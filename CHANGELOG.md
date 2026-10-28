@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/Moodtuner997/docmail/compare/v1.0.2...v1.0.3) (2026-10-28)
+
+
+### Construction
+
+* **release:** les commits docs ne publient plus de release ([#8](https://github.com/Moodtuner997/docmail/issues/8)) ([167bff2](https://github.com/Moodtuner997/docmail/commit/167bff244737b8e5bb44f12adf950710e67c9df0))
+
 ## [1.0.2](https://github.com/Moodtuner997/docmail/compare/v1.0.1...v1.0.2) (2026-10-01)
 
 
