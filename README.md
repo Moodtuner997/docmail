@@ -121,7 +121,7 @@ sent/     confirmed sent (HTTP 2xx) + .sent marker — created by the script onl
 failed/   secret detected (quarantined) or HTTP error logs
 ```
 
-The morning cron simply re-runs the sender on everything in `queue/` — failed sends retry themselves daily with zero effort.
+Nothing retries a failed send: the file stays in `queue/` until you re-run `send-webhook.sh "<file>" "<mode>"` by hand (the morning recap only bundles what already reached the server).
 
 ## Design system
 
