@@ -152,12 +152,12 @@ not proof the email was delivered.** Check the inbox before declaring "sent".
 Confirm to the user based on exit code:
 - `0` -> "Document sent (instant)." or "Document queued for the morning recap." (batch)
 - `1` -> "BLOCKED: secret detected in the document. File moved to failed/. Fix and retry."
-- `2` -> "Webhook failed (non-2xx). File stays in queue/ and will be retried by the next cron."
+- `2` -> "Webhook failed (non-2xx). File stays in queue/; re-run send-webhook.sh by hand to retry (nothing retries it automatically)."
 
 ### If MODE=batch
 
-The file stays in `queue/`; the morning cron calls `send-webhook.sh` for each `.html`.
-Confirm: "Document waiting in queue/. It will be sent in the morning recap."
+The sender posts the file to the server queue at once (local copy moves to `sent/`); the n8n morning recap bundles it.
+Confirm: "Document queued on the server. It will be sent in the morning recap."
 
 ---
 
